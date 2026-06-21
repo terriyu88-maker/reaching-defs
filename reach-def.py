@@ -197,7 +197,12 @@ def bitvec_to_str(bv, total_defs):
     return '{' + ', '.join(items) + '}'
 
 
-def run_reaching_defs(blocks, verbose=False, show_ud=False):
+def bitvec_to_bits(bv, total_defs):
+    bits = ''.join(f' {1 if bv & (1 << i) else 0} ' for i in range(total_defs))
+    return bits
+
+
+def run_reaching_defs(blocks, verbose=False, show_ud=False, show_bits=False):
     block_order = list(blocks.keys())
 
     # Step 1: 收集所有定义
@@ -293,9 +298,9 @@ def run_reaching_defs(blocks, verbose=False, show_ud=False):
     OUT = {bname: 0 for bname in block_order}
 
     # 初始快照
-    snapshots = []  # [(round_num, [(in_str, out_str, changed), ...])]
+    snapshots = []  # [(round_num, [(in_str, out_str, in_val, out_val, changed), ...])]
     snapshots.append((0, [
-        (bitvec_to_str(IN[b], total_defs), bitvec_to_str(OUT[b], total_defs), False)
+        (bitvec_to_str(IN[b], total_defs), bitvec_to_str(OUT[b], total_defs), IN[b], OUT[b], False)
         for b in block_order
     ]))
 
@@ -362,9 +367,9 @@ def run_reaching_defs(blocks, verbose=False, show_ud=False):
             in_str = bitvec_to_str(IN[b], total_defs)
             out_str = bitvec_to_str(OUT[b], total_defs)
             # 检查与本轮开始时相比是否变化
-            prev_in, prev_out, _ = snapshots[-1][1][block_order.index(b)]
+            prev_in, prev_out, _, _, _ = snapshots[-1][1][block_order.index(b)]
             changed = (out_str != prev_out)
-            round_data.append((in_str, out_str, changed))
+            round_data.append((in_str, out_str, IN[b], OUT[b], changed))
         snapshots.append((round_num, round_data))
 
     if verbose:
@@ -408,6 +413,11 @@ def run_reaching_defs(blocks, verbose=False, show_ud=False):
     print()
     print('  ( * 表示本轮 OUT[B] 发生变化 )')
     print()
+
+    # ---- Bit Vector 可视化 ----
+    if show_bits:
+        print_bitvec_table(block_order, IN, OUT, total_defs)
+        print_iteration_bits(block_order, total_defs, snapshots)
 
     # Step 6: 最终解析
     print(f'{"=" * 66}')
@@ -466,6 +476,66 @@ def run_reaching_defs(blocks, verbose=False, show_ud=False):
                             current_reaching |= (1 << def_bit_of[(bname, def_var)])
 
 
+def print_bitvec_table(block_order, IN, OUT, total_defs):
+    print(f'{"=" * 66}')
+    print(f'  Bit Vector 表示 (最终不动点状态)')
+    print(f'{"=" * 66}')
+    bits_header = ''.join(f' d{i+1}' for i in range(total_defs))
+    print(f'\n            {bits_header}     Set')
+    print(f'            {"-" * (total_defs * 3 + 1)}     {"-" * 20}')
+    for bname in block_order:
+        in_bits = bitvec_to_bits(IN[bname], total_defs)
+        in_set = bitvec_to_str(IN[bname], total_defs)
+        out_bits = bitvec_to_bits(OUT[bname], total_defs)
+        out_set = bitvec_to_str(OUT[bname], total_defs)
+        print(f'  IN[{bname:<5}] ={in_bits} = {in_set}')
+        print(f'  OUT[{bname:<5}] ={out_bits} = {out_set}')
+        print()
+
+
+def print_iteration_bits(block_order, total_defs, snapshots):
+    print(f'{"=" * 66}')
+    print(f'  迭代收敛过程 (Bit Vector 推演)')
+    print(f'{"=" * 66}')
+
+    bits_header = ''.join(f' d{i+1}' for i in range(total_defs))
+    in_w = max(8, total_defs * 3 + 2)
+    out_w = max(8, total_defs * 3 + 2)
+
+    for s_idx, (round_num, round_data) in enumerate(snapshots):
+        print(f'\n  Round {round_num}:')
+        hdr = f'    {"Block":<6}  {"IN":^{in_w}}  {"OUT":^{out_w}}  Note'
+        print(hdr)
+        sep_line = f'    {"-" * 6}  {"-" * in_w}  {"-" * out_w}  {"-" * 20}'
+        print(sep_line)
+        for bi, bname in enumerate(block_order):
+            in_str, out_str, in_val, out_val, changed = round_data[bi]
+            in_bits = bitvec_to_bits(in_val, total_defs)
+            out_bits = bitvec_to_bits(out_val, total_defs)
+            note = ''
+            if s_idx > 0 and changed:
+                note = '<-- CHANGED'
+            elif s_idx > 0:
+                note = '(unchanged)'
+            print(f'    {bname:<6}  {in_bits:>{in_w}}  {out_bits:>{out_w}}  {note}')
+    print()
+
+    # 显示位序参考
+    print(f'  位序: [{bits_header.strip()}]')
+    print(f'  1 = 该定义到达该 Block 入口/出口')
+    print(f'  0 = 该定义未到达')
+    print()
+    if len(snapshots) > 1:
+        before_last = snapshots[-2][1]
+        last = snapshots[-1][1]
+        all_same = all(
+            before_last[bi][2] == last[bi][2] and before_last[bi][3] == last[bi][3]
+            for bi in range(len(block_order))
+        )
+        if all_same:
+            print(f'  Round {snapshots[-1][0]} 与 Round {snapshots[-2][0]} 完全相同 -> 不动点收敛。')
+
+
 def _print_state_row(block_label, col1, col2):
     print(f'  {block_label:<8} {col1:<30} {col2:<30}')
 
@@ -479,6 +549,7 @@ def print_usage(prog):
     print('  -cfg       Output CFG in DOT format')
     print('  -reach     Run Reaching Definitions (worklist algorithm)')
     print('  -ud        Show Use-Def chains')
+    print('  -bits      Show bit vector representation')
     print('  -v         Verbose computation steps')
     print('  -o <file>  Save output to file')
     print('  -h, --help Show this help')
@@ -487,6 +558,7 @@ def print_usage(prog):
     print(f'  {prog} example.ll -reach')
     print(f'  {prog} example.ll -reach -ud')
     print(f'  {prog} example.ll -reach -ud -v')
+    print(f'  {prog} example.ll -reach -bits')
     print(f'  {prog} example.ll -reach -o result.txt')
 
 
@@ -502,6 +574,7 @@ def main():
     show_reach = '-reach' in sys.argv
     verbose = '-v' in sys.argv
     show_ud = '-ud' in sys.argv
+    show_bits = '-bits' in sys.argv
 
     output_file = None
     try:
@@ -534,12 +607,12 @@ def main():
                 old_stdout = sys.stdout
                 sys.stdout = f
                 try:
-                    run_reaching_defs(blocks, verbose, show_ud)
+                    run_reaching_defs(blocks, verbose, show_ud, show_bits)
                 finally:
                     sys.stdout = old_stdout
             print(f'Output saved to {output_file}', file=sys.stderr)
         else:
-            run_reaching_defs(blocks, verbose, show_ud)
+            run_reaching_defs(blocks, verbose, show_ud, show_bits)
 
 
 if __name__ == '__main__':

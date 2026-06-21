@@ -68,6 +68,14 @@ string bitvecToStr(BitVec bv, int total) {
     return r + "}";
 }
 
+string bitvecToBits(BitVec bv, int total) {
+    string r;
+    for (int i = 0; i < total; i++) {
+        r += "  " + to_string((bv >> i) & 1) + " ";
+    }
+    return r;
+}
+
 map<string, BasicBlock> parseIR(const string& fn) {
     map<string, BasicBlock> blocks;
     ifstream f(fn);
@@ -250,7 +258,7 @@ void printVerboseStep(const string& bname, const vector<string>& preds, BitVec i
     cout << endl;
 }
 
-struct Snap { int round; vector<string> ins, outs; vector<bool> chgs; };
+struct Snap { int round; vector<string> ins, outs; vector<bool> chgs; vector<BitVec> inVals, outVals; };
 
 void printCmpTable(const vector<Snap>& snaps, const vector<string>& order) {
     cout << endl << string(66, '=') << endl;
@@ -287,6 +295,65 @@ void printCmpTable(const vector<Snap>& snaps, const vector<string>& order) {
         cout << endl;
     }
     cout << endl << "  ( * 表示本轮 OUT[B] 发生变化 )" << endl << endl;
+}
+
+void printBitVecTable(const vector<string>& order, const map<string, BitVec>& IN,
+                       const map<string, BitVec>& OUT, int total) {
+    cout << endl << string(66, '=') << endl
+         << "  Bit Vector 表示 (最终不动点状态)" << endl
+         << string(66, '=') << endl;
+    string hdr;
+    for (int i = 0; i < total; i++) hdr += " d" + to_string(i + 1);
+    cout << endl << "            " << hdr << "     Set" << endl;
+    cout << "            " << string(total * 3 + 1, '-') << "     " << string(20, '-') << endl;
+    for (auto& b : order) {
+        cout << "  IN["  << left << setw(5) << b << "] =" << bitvecToBits(IN.at(b),  total)
+             << " = " << bitvecToStr(IN.at(b), total) << endl;
+        cout << "  OUT[" << left << setw(5) << b << "] =" << bitvecToBits(OUT.at(b), total)
+             << " = " << bitvecToStr(OUT.at(b), total) << endl;
+        cout << endl;
+    }
+}
+
+void printIterationBits(const vector<Snap>& snaps, const vector<string>& order, int total) {
+    cout << string(66, '=') << endl
+         << "  迭代收敛过程 (Bit Vector 推演)" << endl
+         << string(66, '=') << endl;
+    int inW = max(8, total * 3 + 2);
+    int outW = max(8, total * 3 + 2);
+    for (size_t si = 0; si < snaps.size(); si++) {
+        auto& sn = snaps[si];
+        cout << endl << "  Round " << sn.round << ":" << endl;
+        cout << "    " << left << setw(6) << "Block"
+             << "  " << setw(inW) << "IN"
+             << "  " << setw(outW) << "OUT"
+             << "  Note" << endl;
+        cout << "    " << string(6, '-') << "  " << string(inW, '-')
+             << "  " << string(outW, '-') << "  " << string(20, '-') << endl;
+        for (size_t bi = 0; bi < order.size(); bi++) {
+            string nte = "";
+            if (si > 0) nte = sn.chgs[bi] ? "<-- CHANGED" : "(unchanged)";
+            cout << "    " << left << setw(6) << order[bi]
+                 << "  " << right << setw(inW) << bitvecToBits(sn.inVals[bi], total)
+                 << "  " << right << setw(outW) << bitvecToBits(sn.outVals[bi], total)
+                 << "  " << nte << endl;
+        }
+    }
+    cout << endl;
+    cout << "  位序: [";
+    for (int i = 0; i < total; i++) { if (i) cout << " "; cout << "d" << (i + 1); }
+    cout << "]" << endl;
+    cout << "  1 = 该定义到达该 Block 入口/出口" << endl;
+    cout << "  0 = 该定义未到达" << endl << endl;
+    if (snaps.size() > 1) {
+        auto& bl = snaps[snaps.size() - 2];
+        auto& ls = snaps[snaps.size() - 1];
+        bool same = true;
+        for (size_t bi = 0; bi < order.size(); bi++)
+            if (bl.inVals[bi] != ls.inVals[bi] || bl.outVals[bi] != ls.outVals[bi]) { same = false; break; }
+        if (same)
+            cout << "  Round " << ls.round << " 与 Round " << bl.round << " 完全相同 -> 不动点收敛。" << endl;
+    }
 }
 
 void printFinal(const vector<string>& order, const map<string, BitVec>& IN,
@@ -335,7 +402,7 @@ void printUseDef(const vector<string>& order, const map<string, BitVec>& IN,
     }
 }
 
-void runReachingDefs(const map<string, BasicBlock>& blocks, bool verbose, bool showUD) {
+void runReachingDefs(const map<string, BasicBlock>& blocks, bool verbose, bool showUD, bool showBits) {
     vector<string> order;
     for (auto& p : blocks) order.push_back(p.first);
 
@@ -402,6 +469,8 @@ void runReachingDefs(const map<string, BasicBlock>& blocks, bool verbose, bool s
             s0.ins.push_back(bitvecToStr(IN[b], total));
             s0.outs.push_back(bitvecToStr(OUT[b], total));
             s0.chgs.push_back(false);
+            s0.inVals.push_back(IN[b]);
+            s0.outVals.push_back(OUT[b]);
         }
         snaps.push_back(s0);
     }
@@ -458,6 +527,7 @@ void runReachingDefs(const map<string, BasicBlock>& blocks, bool verbose, bool s
             string is = bitvecToStr(IN[b], total), os = bitvecToStr(OUT[b], total);
             bool chg = (os != snaps.back().outs[sn.ins.size()]);
             sn.ins.push_back(is); sn.outs.push_back(os); sn.chgs.push_back(chg);
+            sn.inVals.push_back(IN[b]); sn.outVals.push_back(OUT[b]);
         }
         snaps.push_back(sn);
     }
@@ -465,6 +535,12 @@ void runReachingDefs(const map<string, BasicBlock>& blocks, bool verbose, bool s
     if (verbose) cout << endl << "  Worklist 收敛: 共处理 " << processed << " 个块, " << round << " 轮" << endl;
 
     printCmpTable(snaps, order);
+
+    if (showBits) {
+        printBitVecTable(order, IN, OUT, total);
+        printIterationBits(snaps, order, total);
+    }
+
     printFinal(order, IN, allDefs, total);
 
     if (showUD)
@@ -476,11 +552,13 @@ void printUsage(const char* p) {
          << "  -cfg       Output CFG in DOT format\n"
          << "  -reach     Run Reaching Definitions (worklist algorithm)\n"
          << "  -ud        Show Use-Def chains\n"
+         << "  -bits      Show bit vector representation\n"
          << "  -v         Verbose computation steps\n"
          << "  -o <file>  Save output to file\n"
          << "  -h, --help Show this help\n\nExample:\n"
          << "  " << p << " example.ll -reach\n"
          << "  " << p << " example.ll -reach -ud -v\n"
+         << "  " << p << " example.ll -reach -bits\n"
          << "  " << p << " example.ll -reach -o result.txt\n"
          << "  " << p << " example.ll -cfg > cfg.dot\n";
 }
@@ -489,7 +567,7 @@ int main(int argc, char* argv[]) {
     if (argc < 2) { printUsage(argv[0]); return 1; }
 
     string inputFile = argv[1], outputFile;
-    bool showCFG = false, showReach = false, verbose = false, showUD = false;
+    bool showCFG = false, showReach = false, verbose = false, showUD = false, showBits = false;
 
     for (int i = 2; i < argc; i++) {
         string a = argv[i];
@@ -497,6 +575,7 @@ int main(int argc, char* argv[]) {
         else if (a == "-reach") showReach = true;
         else if (a == "-v") verbose = true;
         else if (a == "-ud") showUD = true;
+        else if (a == "-bits") showBits = true;
         else if (a == "-o" && i + 1 < argc) outputFile = argv[++i];
         else if (a == "-h" || a == "--help") { printUsage(argv[0]); return 0; }
     }
@@ -520,11 +599,11 @@ int main(int argc, char* argv[]) {
             ofstream fout(outputFile);
             if (!fout.is_open()) { cerr << "Error: Cannot open " << outputFile << endl; return 1; }
             streambuf* ob = cout.rdbuf(); cout.rdbuf(fout.rdbuf());
-            runReachingDefs(blocks, verbose, showUD);
+            runReachingDefs(blocks, verbose, showUD, showBits);
             cout.rdbuf(ob);
             cerr << "Output saved to " << outputFile << endl;
         } else {
-            runReachingDefs(blocks, verbose, showUD);
+            runReachingDefs(blocks, verbose, showUD, showBits);
         }
     }
     return 0;

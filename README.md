@@ -18,6 +18,7 @@ python3 reach-def.py example.ll -reach -ud
 |------|------|
 | `-reach` | 运行到达定值分析 |
 | `-ud` | 显示 Use-Def 链 |
+| `-bits` | 显示 Bit Vector 可视化 |
 | `-v` | 详细计算步骤 |
 | `-cfg` | 输出 CFG DOT 格式 |
 | `-o <file>` | 保存输出到文件 |
@@ -30,6 +31,9 @@ python3 reach-def.py example.ll -reach
 
 # 表格 + Use-Def 链
 python3 reach-def.py example.ll -reach -ud
+
+# Bit Vector 可视化
+python3 reach-def.py example.ll -reach -bits
 
 # 完整详细输出
 python3 reach-def.py example.ll -reach -ud -v
@@ -55,8 +59,8 @@ Worklist = 所有块
 
 while Worklist 非空:
     取当前 batch 中的块 B
-    IN[B]  = ∪ OUT[P]   (P 为 B 的前驱)
-    OUT[B] = Gen[B] ∪ (IN[B] - Kill[B])
+    IN[B]  = U OUT[P]   (P 为 B 的前驱)
+    OUT[B] = Gen[B] U (IN[B] - Kill[B])
     若 OUT[B] 变化:
         将 B 的所有后继加入 Worklist
 ```
@@ -68,8 +72,9 @@ while Worklist 非空:
 1. 定义信息 (d1~dN)
 2. Gen/Kill 集合
 3. Worklist 轮次状态对比表
-4. 最终解析 (到达各块入口的定义)
-5. Use-Def 链 (可选)
+4. Bit Vector 可视化 (0/1 表示) 及迭代推演过程
+5. 最终解析 (到达各块入口的定义)
+6. Use-Def 链 (可选)
 
 完整分析文档: `docs/reaching-defs-analysis.md`
 
