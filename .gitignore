@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+result.txt
+ud_output.txt
