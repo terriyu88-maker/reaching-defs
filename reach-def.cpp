@@ -129,7 +129,51 @@ map<string, BasicBlock> parseIR(const string& fn) {
     return blocks;
 }
 
+map<pair<string,int>, string> getDefLabels(const map<string, BasicBlock>& blks) {
+    vector<string> order;
+    for (auto& p : blks) order.push_back(p.first);
+
+    // rawId, varName, blockName, instIdx
+    vector<tuple<int,string,string,int>> allRaw;
+    map<string, vector<int>> varDefs;
+
+    for (auto& bname : order) {
+        auto& blk = blks.at(bname);
+        for (size_t ii = 0; ii < blk.instructions.size(); ii++) {
+            auto& inst = blk.instructions[ii];
+            if (inst.result.empty()) continue;
+            string vn = extractVarName(inst.result);
+            if (vn.empty()) continue;
+            int rawId = (int)allRaw.size() + 1;
+            allRaw.push_back(make_tuple(rawId, vn, bname, (int)ii));
+            varDefs[vn].push_back(rawId);
+        }
+    }
+
+    set<string> interesting;
+    for (auto& vd : varDefs) {
+        set<string> dbs;
+        for (int did : vd.second)
+            dbs.insert(get<2>(allRaw[did - 1]));  // blockName at index 2
+        if (dbs.size() > 1 && vd.first != "t" && vd.first != "cond")
+            interesting.insert(vd.first);
+    }
+
+    map<pair<string,int>, string> labels;
+    int newId = 0;
+    for (auto& t : allRaw) {
+        string vn = get<1>(t);
+        if (interesting.count(vn)) {
+            newId++;
+            labels[make_pair(get<2>(t), get<3>(t))] = "d" + to_string(newId);
+        }
+    }
+    return labels;
+}
+
 void outputDOT(const map<string, BasicBlock>& blks, ostream& out) {
+    auto defLabels = getDefLabels(blks);
+
     out << "digraph CFG {" << endl;
     out << "  rankdir=TD;\n  node [shape=record, fontname=\"Consolas\", fontsize=11];\n  edge [fontname=\"Consolas\", fontsize=9];\n\n";
     for (auto& p : blks) {
@@ -138,6 +182,8 @@ void outputDOT(const map<string, BasicBlock>& blks, ostream& out) {
         for (size_t i = 0; i < p.second.instructions.size(); i++) {
             auto& inst = p.second.instructions[i];
             if (i) out << "\\l";
+            auto key = make_pair(p.first, (int)i);
+            if (defLabels.count(key)) out << defLabels.at(key) << ": ";
             if (inst.isBranch) out << inst.raw;
             else if (!inst.result.empty()) {
                 out << inst.result << " = " << inst.opcode;

@@ -121,9 +121,42 @@ def parse_ir(filename):
     return blocks
 
 
+# ======================== 定义编号计算 (供 DOT 和分析共用) ========================
+
+def get_def_labels(blocks):
+    """返回 {(blockName, instIndex): 'dN', ...} 表示每条指令的定义编号"""
+    block_order = list(blocks.keys())
+    all_raw = []
+    var_defs = OrderedDict()
+
+    for bname in block_order:
+        for ii, inst in enumerate(blocks[bname].instructions):
+            if not inst.result:
+                continue
+            var_name = extract_var_name(inst.result)
+            if not var_name:
+                continue
+            all_raw.append((len(all_raw) + 1, var_name, bname, ii))
+            var_defs.setdefault(var_name, []).append(len(all_raw))
+
+    interesting_vars = set()
+    for vn, ids in var_defs.items():
+        def_blocks = set(all_raw[i - 1][2] for i in ids)
+        if len(def_blocks) > 1 and vn != 't':
+            interesting_vars.add(vn)
+
+    filtered = [d for d in all_raw if d[1] in interesting_vars]
+    labels = {}
+    for new_id, (old_id, var_name, bname, ii) in enumerate(filtered, 1):
+        labels[(bname, ii)] = f'd{new_id}'
+    return labels
+
+
 # ======================== DOT 格式输出 ========================
 
 def output_dot(blocks, out):
+    def_labels = get_def_labels(blocks)
+
     out.write("digraph CFG {\n")
     out.write("  rankdir=TD;\n")
     out.write('  node [shape=record, fontname="Consolas", fontsize=11];\n')
@@ -133,10 +166,13 @@ def output_dot(blocks, out):
         out.write(f'  "{name}" [label="{{')
         out.write(f'{name} | ')
         first = True
-        for inst in block.instructions:
+        for ii, inst in enumerate(block.instructions):
             if not first:
                 out.write('\\l')
             first = False
+            dl = def_labels.get((name, ii), '')
+            if dl:
+                out.write(dl + ': ')
             if inst.is_branch:
                 out.write(inst.raw)
             elif inst.result:

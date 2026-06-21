@@ -28,7 +28,7 @@ OUT[B] = Gen[B] ∪ (IN[B] - Kill[B])
 i = m - 1;    // d1
 j = n;        // d2
 a = u1;       // d3
-while (...) {
+while (i + j < 10) {
     i = i + 1;   // d4
     j = j - 1;   // d5
     a = u2;      // d6
