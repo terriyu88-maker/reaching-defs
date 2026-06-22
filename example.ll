@@ -22,7 +22,7 @@ define void @reaching_defs_example(i32 %m, i32 %n, i32 %u1, i32 %u2, i32 %u3) {
 B1:
   %i1 = sub i32 %m, 1       ; d1: i = m-1
   %j1 = mov %n             ; d2: j = n
-  %a1 = sub i32 %u1, 0      ; d3: a = u1
+  %a1 = mov %u1             ; d3: a = u1
   br label %B2
 
 B2:
@@ -33,12 +33,12 @@ B2:
   br i1 %cond, label %B3, label %exit
 
 B3:
-  %a2 = sub i32 %u2, 0      ; d6: a = u2
+  %a2 = mov %u2             ; d6: a = u2
   %t2 = add i32 %i2, %a2
   br label %B4
 
 B4:
-  %i3 = sub i32 %u3, 0      ; d7: i = u3
+  %i3 = mov %u3             ; d7: i = u3
   %t3 = add i32 %i3, %j2
   br label %B2
 

@@ -3,10 +3,10 @@ digraph CFG {
   node [shape=record, fontname="Consolas", fontsize=11];
   edge [fontname="Consolas", fontsize=9];
 
-  "B1" [label="{B1 | d1: %i1 = sub %m 1\ld2: %j1 = mov %n\ld3: %a1 = sub %u1 0\lbr label %B2}"];
+  "B1" [label="{B1 | d1: %i1 = sub %m 1\ld2: %j1 = mov %n\ld3: %a1 = mov %u1\lbr label %B2}"];
   "B2" [label="{B2 | d4: %i2 = add %i1 1\ld5: %j2 = sub %j1 1\l%t1 = add %i2 %j2\l%cond = icmp %t1 10\lbr i1 %cond, label %B3, label %exit}"];
-  "B3" [label="{B3 | d6: %a2 = sub %u2 0\l%t2 = add %i2 %a2\lbr label %B4}"];
-  "B4" [label="{B4 | d7: %i3 = sub %u3 0\l%t3 = add %i3 %j2\lbr label %B2}"];
+  "B3" [label="{B3 | d6: %a2 = mov %u2\l%t2 = add %i2 %a2\lbr label %B4}"];
+  "B4" [label="{B4 | d7: %i3 = mov %u3\l%t3 = add %i3 %j2\lbr label %B2}"];
   "exit" [label="{exit | ret void\l}"];
 
   "B1" -> "B2";
