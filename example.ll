@@ -8,14 +8,31 @@
 ;   %j1, %j2       -> 变量 j (被 d2, d5 定值)
 ;   %a1, %a2       -> 变量 a (被 d3, d6 定值)
 ;
-; CFG 结构:
-;        B1 -> B2 -> B4 -> B2 (循环)
-;              B2 -> B3 -> B4
+; CFG 结构 (Dragon Book Fig 9.14):
+;        B1 -> B2 -> B3 -> B4
+;               |           |  \
+;               v           v   v
+;              B4          B2  exit
 ;         
 ;   B1 前驱: 无 (入口)
 ;   B2 前驱: B1, B4
 ;   B3 前驱: B2
 ;   B4 前驱: B2, B3
+;   exit 前驱: B4
+;
+; C 伪代码:
+;   i = m - 1;
+;   j = n;
+;   a = u1;
+;   while (1) {
+;       i = i + 1;
+;       j = j - 1;
+;       if (i + j < 10) {
+;           a = u2;
+;       }
+;       i = u3;
+;       if (i < 0) break;
+;   }
 ;
 ; ============================================================================
 
@@ -39,5 +56,9 @@ B3:
 
 B4:
   %i3 = mov %u3             ; d7: i = u3
-  br label %B2
+  %cont = icmp slt i32 %i3, 0
+  br i1 %cont, label %B2, label %exit
+
+exit:
+  ret void
 }

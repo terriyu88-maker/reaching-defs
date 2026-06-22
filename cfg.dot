@@ -6,11 +6,13 @@ digraph CFG {
   "B1" [label="{B1 | d1: %i1 = sub %m 1\ld2: %j1 = mov %n\ld3: %a1 = mov %u1\lbr label %B2}"];
   "B2" [label="{B2 | d4: %i2 = add %i1 1\ld5: %j2 = sub %j1 1\l%t1 = add %i2 %j2\l%cond = icmp %t1 10\lbr i1 %cond, label %B3, label %B4}"];
   "B3" [label="{B3 | d6: %a2 = mov %u2\lbr label %B4}"];
-  "B4" [label="{B4 | d7: %i3 = mov %u3\lbr label %B2\l}"];
+  "B4" [label="{B4 | d7: %i3 = mov %u3\l%cont = icmp %i3 0\lbr i1 %cont, label %B2, label %exit}"];
+  "exit" [label="{exit | ret void\l}"];
 
   "B1" -> "B2";
   "B2" -> "B3";
   "B2" -> "B4";
   "B3" -> "B4";
-  "B4" -> "B2";
+  "B4" -> "B2":w [constraint=true];
+  "B4" -> "exit";
 }

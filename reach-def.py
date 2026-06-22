@@ -157,6 +157,24 @@ def get_def_labels(blocks):
 def output_dot(blocks, out):
     def_labels = get_def_labels(blocks)
 
+    entry = next(iter(blocks.keys()))
+
+    # 检测回边: DFS 中目标已访问且尚未完成
+    visited = set()
+    finished = set()
+    backedges = set()
+
+    def dfs(bname):
+        visited.add(bname)
+        for succ in blocks[bname].successors:
+            if succ not in visited:
+                dfs(succ)
+            elif succ not in finished:
+                backedges.add((bname, succ))
+        finished.add(bname)
+
+    dfs(entry)
+
     out.write("digraph CFG {\n")
     out.write("  rankdir=TD;\n")
     out.write('  node [shape=record, fontname="Consolas", fontsize=11];\n')
@@ -184,7 +202,10 @@ def output_dot(blocks, out):
     out.write('\n')
     for name, block in blocks.items():
         for succ in block.successors:
-            out.write(f'  "{name}" -> "{succ}";\n')
+            if (name, succ) in backedges:
+                out.write(f'  "{name}" -> "{succ}":w [constraint=true];\n')
+            else:
+                out.write(f'  "{name}" -> "{succ}";\n')
     out.write('}\n')
 
 
@@ -599,7 +620,11 @@ def main():
         print(f'  {name} -> [{succ_str}]', file=sys.stderr)
 
     if show_cfg:
-        output_dot(blocks, sys.stdout)
+        if output_file:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                output_dot(blocks, f)
+        else:
+            output_dot(blocks, sys.stdout)
 
     if show_reach:
         if output_file:

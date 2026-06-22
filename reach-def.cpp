@@ -13,6 +13,7 @@
 #include <deque>
 #include <iomanip>
 #include <algorithm>
+#include <functional>
 
 using namespace std;
 
@@ -182,6 +183,20 @@ map<pair<string,int>, string> getDefLabels(const map<string, BasicBlock>& blks) 
 void outputDOT(const map<string, BasicBlock>& blks, ostream& out) {
     auto defLabels = getDefLabels(blks);
 
+    string entry = blks.begin()->first;
+    set<string> visited, finished;
+    set<pair<string, string>> backedges;
+
+    function<void(const string&)> dfs = [&](const string& bname) {
+        visited.insert(bname);
+        for (auto& s : blks.at(bname).successors) {
+            if (!visited.count(s)) dfs(s);
+            else if (!finished.count(s)) backedges.insert({bname, s});
+        }
+        finished.insert(bname);
+    };
+    dfs(entry);
+
     out << "digraph CFG {" << endl;
     out << "  rankdir=TD;\n  node [shape=record, fontname=\"Consolas\", fontsize=11];\n  edge [fontname=\"Consolas\", fontsize=9];\n\n";
     for (auto& p : blks) {
@@ -202,8 +217,12 @@ void outputDOT(const map<string, BasicBlock>& blks, ostream& out) {
     }
     out << endl;
     for (auto& p : blks)
-        for (auto& s : p.second.successors)
-            out << "  \"" << p.first << "\" -> \"" << s << "\";" << endl;
+        for (auto& s : p.second.successors) {
+            if (backedges.count({p.first, s}))
+                out << "  \"" << p.first << "\" -> \"" << s << "\":w [constraint=true];" << endl;
+            else
+                out << "  \"" << p.first << "\" -> \"" << s << "\";" << endl;
+        }
     out << "}" << endl;
 }
 
@@ -592,7 +611,15 @@ int main(int argc, char* argv[]) {
         cerr << "]" << endl;
     }
 
-    if (showCFG) outputDOT(blocks, cout);
+    if (showCFG) {
+        if (!outputFile.empty()) {
+            ofstream fout(outputFile);
+            if (!fout.is_open()) { cerr << "Error: Cannot open " << outputFile << endl; return 1; }
+            outputDOT(blocks, fout);
+        } else {
+            outputDOT(blocks, cout);
+        }
+    }
 
     if (showReach) {
         if (!outputFile.empty()) {
