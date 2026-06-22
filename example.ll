@@ -43,7 +43,5 @@ B4:
   br label %B2
 
 exit:
-  %t4 = add i32 %i1, %i2
-  %t5 = sub i32 %t4, 0
   ret void
 }
