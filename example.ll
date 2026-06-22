@@ -21,7 +21,7 @@
 define void @reaching_defs_example(i32 %m, i32 %n, i32 %u1, i32 %u2, i32 %u3) {
 B1:
   %i1 = sub i32 %m, 1       ; d1: i = m-1
-  %j1 = sub i32 %n, 0       ; d2: j = n
+  %j1 = mov %n             ; d2: j = n
   %a1 = sub i32 %u1, 0      ; d3: a = u1
   br label %B2
 
