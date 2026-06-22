@@ -25,14 +25,15 @@ OUT[B] = Gen[B] ∪ (IN[B] - Kill[B])
 ### 源代码等价形式
 
 ```c
-i = m - 1;    // d1
-j = n;        // d2
-a = u1;       // d3
-while (i + j < 10) {
-    i = i + 1;   // d4
-    j = j - 1;   // d5
-    a = u2;      // d6
-    i = u3;      // d7
+i = m - 1;     // d1
+j = n;         // d2
+a = u1;        // d3
+while (1) {
+    i = i + 1;  // d4
+    j = j - 1;  // d5
+    if (i + j >= 10) break;
+    a = u2;     // d6
+    i = u3;     // d7
 }
 ```
 
